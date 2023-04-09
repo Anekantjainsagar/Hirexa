@@ -25,11 +25,11 @@ export default function Example({ user, handleLogout }) {
           aria-label="Global"
         >
           <div className="flex lg:flex-1 ">
-            <a href="#" className="p-1.5">
+            <Link to="/" className="p-1.5">
               <span className="text-2xl font-bold capitalize z-10 text-white">
                 HIREXA
               </span>
-            </a>
+            </Link>
           </div>
           <div className="flex lg:hidden">
             <button

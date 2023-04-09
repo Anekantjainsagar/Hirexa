@@ -25,9 +25,6 @@ const Report = ({ responseData }) => {
           <PieChartAudio audio={responseData?.audio} />
           <p className="text-xl font-semibold">Audio Analysis</p>
         </div> */}
-        <div className="flex justify-center text-lg">
-          <span className="text-lg font-semibold">Summary :- </span>
-        </div>
       </div>
     </div>
   );
