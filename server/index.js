@@ -33,7 +33,7 @@ const payload = {
 
 const token = jwt.sign(payload, process.env.jwt_secret);
 
-const port = 3000;
+const port = 8000;
 app.listen(port, () => {
   console.log(`App running on port ${port}.`);
 });

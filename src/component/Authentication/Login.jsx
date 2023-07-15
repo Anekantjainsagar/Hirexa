@@ -11,7 +11,7 @@ const Login = ({ user, handleUser }) => {
   const handleLogin = (e) => {
     e.preventDefault();
     axios
-      .post(`https://hirexa-backend.onrender.com/api/login`, {
+      .post(`http://localhost:8000/api/login`, {
         email,
         password,
       })

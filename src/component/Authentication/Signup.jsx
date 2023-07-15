@@ -22,7 +22,7 @@ const Signup = ({ user, handleUser }) => {
     };
     // console.log(data.username);
     axios
-      .post(`https://hirexa-backend.onrender.com/api/signup`, data)
+      .post(`http://localhost:8000/api/signup`, data)
       .then((response) => {
         //console.log(response);
         handleUser(email, password, response.data.token);

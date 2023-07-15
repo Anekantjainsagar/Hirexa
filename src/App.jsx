@@ -1,7 +1,6 @@
 import { useLayoutEffect, useState } from "react";
 import "./App.css";
 import Hero from "./component/Hero/Hero.jsx";
-import Footer from "./component/Footer/Footer.jsx";
 import Login from "./component/Authentication/Login.jsx";
 import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import Intro from "./component/Hero/Intro.jsx";
@@ -33,7 +32,7 @@ function App() {
     e.preventDefault();
     // console.log("gg");
     axios
-      .get(`https://hirexa-backend.onrender.com/api/logout`, {
+      .get(`http://localhost:8000/api/logout`, {
         headers: {
           Authorization: "Bearer " + user.token,
         },
@@ -56,6 +55,7 @@ function App() {
       handleUser(name, email, token);
     }
   }, []);
+
   return (
     <div className="App">
       <Hero key={"Hero"} user={user} handleLogout={handleLogout} />
@@ -65,10 +65,10 @@ function App() {
             key={"Home"}
             path="/"
             element={
-              <>
+              <div>
                 <Intro user={user} handleUser={handleUser} />
                 <Employee user={user} handleUser={handleUser} />
-              </>
+              </div>
             }
           />
           <Route

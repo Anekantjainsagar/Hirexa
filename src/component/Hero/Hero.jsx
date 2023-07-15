@@ -9,8 +9,6 @@ import { Link } from "react-router-dom";
 const navigation = [
   { name: "Home", href: "/" },
   { name: "About", href: "/about" },
-  { name: "Features", href: "/features" },
-  { name: "Profile", href: "/profile" },
 ];
 
 export default function Example({ user, handleLogout }) {

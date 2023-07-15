@@ -21,10 +21,9 @@ const Report = ({ responseData }) => {
           <PieChartVideo video={responseData?.video} />
           <p className="text-xl font-semibold">Video Analysis</p>
         </div>
-        {/* <div className="flex flex-col items-center justify-center py-4">
-          <PieChartAudio audio={responseData?.audio} />
-          <p className="text-xl font-semibold">Audio Analysis</p>
-        </div> */}
+      </div>
+      <div className="flex justify-center text-xl font-semibold">
+        {responseData?.description}
       </div>
     </div>
   );

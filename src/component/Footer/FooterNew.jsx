@@ -8,7 +8,7 @@ import {
 
 const FooterNew = () => {
   return (
-    <div className="fixed left-0 bottom-0 py-3 text-lg bg-grad-shivam flex-row-reverse text-white w-full justify-between px-10 flex items-center">
+    <div className="relative left-0 bottom-0 py-1 mt-[35vh] text-lg bg-grad-shivam flex-row-reverse text-white w-full justify-between px-10 flex items-center">
       <div className="flex pb-2 pt-1">
         <AiFillInstagram
           size={34}
