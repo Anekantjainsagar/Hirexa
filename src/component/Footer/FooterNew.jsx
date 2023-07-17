@@ -28,7 +28,7 @@ const FooterNew = () => {
         <AiFillGithub size={34} className="cursor-pointer mx-2" color="white" />
       </div>
       <div className="text-white flex items-center font-semibold">
-        HIREXA made by Unstoppables with{" "}
+        HIREXA made by Code Crafters with{" "}
         <span className="text-3xl ml-1.5">&#9829;</span>
       </div>
     </div>

@@ -15,6 +15,14 @@ import matplotlib.image as mpimg
 import time
 from scipy.io import wavfile
 from twilio.rest import Client
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+from nltk.stem.porter import PorterStemmer
+ps = PorterStemmer()
 
 nltk.download('vader_lexicon')
 app = Flask(__name__)
@@ -113,6 +121,7 @@ def upload():
     text = recognizer.recognize_google(data, key=None)
     print(text)
     
+    # Sentiment analysis
     from nltk.sentiment import SentimentIntensityAnalyzer
     analyzer = SentimentIntensityAnalyzer()
     sentiment_scores = analyzer.polarity_scores(text)
@@ -144,27 +153,147 @@ def upload():
         detect_emotion(frame_path)
 
 
+    # Showing emotions 
     print("Emotions print karo")
     emotions = [angry, disgust, fear, happy, sad, surprise, neutral]
     emo = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
     max_emotion = emotions.index(max(emotions))
     print(max_emotion)
+    
+    # Define the emotion values for video and audio
+    video_emotions = {
+        'Angry': emotions[0],
+        'Disgust': emotions[1],
+        'Fear': emotions[2],
+        'Happy': emotions[3],
+        'Sad': emotions[4],
+        'Surprise': emotions[5],
+        'Neutral': emotions[6]
+    }
 
-    final_data = { "audio" : sentiment_scores, "video" : emotions, "text" : text,"description":description }
+    audio_emotions = {
+        'Positive': sentiment_scores['pos'],
+        'Negative': sentiment_scores['neg'],
+        'Neutral': sentiment_scores['neu']
+    }
 
-    # account_sid = 'ACa1813c9d3eb6caa63492cebdb88100fa'
-    # auth_token = '4dbc15e40cacf4518cc576a6340971ac'
-    # client = Client(account_sid, auth_token)
-    # message_body = "Hello from Analyzer! We have analyzed your video and found that you are " + emo[max_emotion] + "." 
-    # message = client.messages \
-    #             .create(
-    #                  body=message_body,
-    #                  from_='+15077283153',  # replace with your Twilio phone number
-    #                  to='+919301658552'  # replace with your recipient's phone number
-                #  )
+    # Define the weights for video and audio emotions
+    video_weights = {
+        'Angry': 2,
+        'Disgust': 1,
+        'Fear': 1,
+        'Happy': 3,
+        'Sad': 2,
+        'Surprise': 2,
+        'Neutral': 1
+    }
+
+    audio_weights = {
+        'Positive': 2,
+        'Negative': 2,
+        'Neutral': 1
+    }
+
+    # Calculate the weighted scores for video and audio
+    video_score = sum(video_weights[emotion] * video_emotions[emotion] for emotion in video_emotions)
+    audio_score = sum(audio_weights[emotion] * audio_emotions[emotion] for emotion in audio_emotions)
+
+    # Define the thresholds for each ranking category
+    low_threshold = 70
+    medium_threshold = 120
+
+    audio_score = audio_score * 60
+    
+    course = ""
+    
+    # Assign ranking categories based on the scores
+    if video_score > audio_score:
+        if video_score <= low_threshold:
+            course = 'Communication in the 21st Century Workplace'
+        elif video_score <= medium_threshold:
+            course = 'Communication Skills for University Success'
+        else:
+            course = 'Take Your English Communication Skills to the Next Level'
+    elif video_score < audio_score:
+        if audio_score <= low_threshold:
+            course = 'Introduction to Communication Science'
+        elif audio_score <= medium_threshold:
+            course = 'Oral Communication for Engineering Leaders'
+        else:
+            course = 'Business Russian Communication. Part 3'
+    
+    final_data = { "audio" : sentiment_scores, "video" : emotions, "text" : text,"course":course}
     
     # # Process the video as needed
     return jsonify(final_data)
+
+def stem(text):
+    y=[]
+    
+    for i in text.split():
+        y.append(ps.stem(i))
+    
+    return " ".join(y)
+
+def recommend(new_df,similarity,course):
+    course_index = new_df[new_df['Course Name'] == course].index[0]
+    distances = similarity[course_index]
+    course_list = sorted(list(enumerate(distances)),reverse=True, key=lambda x:x[1])[1:7]
+    result_list = []
+    
+    for i in course_list:
+        course_name = new_df.iloc[i[0]]['Course Name']
+        course_url = new_df.iloc[i[0]]['Course URL']
+        course_desc = new_df.iloc[i[0]]['Course Description']
+        result_list.append({"name": course_name, "url": course_url,"description": course_desc})
+        
+    return result_list
+
+@app.route('/', methods=['POST'])
+def result():
+    data = pd.read_csv("../Essetials/Coursera.csv")
+
+    
+    data = data[['Course Name','Difficulty Level','Course Description','Skills','Course URL']]
+    
+    # Removing spaces between the words (Lambda funtions can be used as well)
+    data['Course Name'] = data['Course Name'].str.replace(' ',',')
+    data['Course Name'] = data['Course Name'].str.replace(',,',',')
+    data['Course Name'] = data['Course Name'].str.replace(':','')
+    data['Course Description'] = data['Course Description'].str.replace(' ',',')
+    data['Course Description'] = data['Course Description'].str.replace(',,',',')
+    data['Course Description'] = data['Course Description'].str.replace('_','')
+    data['Course Description'] = data['Course Description'].str.replace(':','')
+    data['Course Description'] = data['Course Description'].str.replace('(','')
+    data['Course Description'] = data['Course Description'].str.replace(')','')
+
+    #removing paranthesis from skills columns 
+    data['Skills'] = data['Skills'].str.replace('(','')
+    data['Skills'] = data['Skills'].str.replace(')','')
+    
+    data['tags'] = data['Course Name'] + data['Difficulty Level'] + data['Course Description'] + data['Skills']
+    
+    data['tags'].iloc[1]
+    
+    new_df = data[['Course Name','tags','Course URL','Course Description']]
+    
+    new_df.loc[:, 'tags'] = data['tags'].str.replace(',', ' ')
+    new_df.loc[:, 'Course Name'] = data['Course Name'].str.replace(',', ' ')
+    
+    new_df.rename(columns={'Course Name': 'course_name'})
+    
+    new_df.loc[:, 'tags'] = new_df['tags'].apply(lambda x: x.lower()) #lower casing the tags column
+    
+    cv = CountVectorizer(max_features=5000,stop_words='english')
+    vectors = cv.fit_transform(new_df['tags']).toarray()
+    
+    new_df.loc[:, 'tags'] = new_df['tags'].apply(stem) #applying stemming on the tags column
+    similarity = cosine_similarity(vectors)
+    result = recommend(new_df,similarity,request.json['course'])
+    
+    return jsonify({"recommand":result})
+        
+    
 
 if __name__ == '__main__':
     app.run(debug=True)
