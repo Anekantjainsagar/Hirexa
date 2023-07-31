@@ -27,7 +27,7 @@ const Report = ({ responseData }) => {
 
       {state?.length > 0 ? (
         <>
-          <p className="text-3xl font-semibold mb-2">Recommanded courses</p>
+          <p className="text-3xl font-semibold mb-4">Recommanded courses</p>
           <div className="w-[90%] grid-cols-3 grid gap-5 mx-auto mb-5">
             {state.map((e, i) => {
               return (
