@@ -1,6 +1,4 @@
-from flask import Flask, request,jsonify 
-from flask_cors import CORS, cross_origin
-import numpy as np
+from flask import Flask, request, jsonify
 import moviepy.editor as mp
 from google.cloud import speech_v1p1beta1 as speech
 import nltk
@@ -10,156 +8,131 @@ from langdetect import detect
 import cv2
 import os
 from fer import FER
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-import time
-from scipy.io import wavfile
-from twilio.rest import Client
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from nltk.stem.porter import PorterStemmer
-ps = PorterStemmer()
-
-nltk.download('vader_lexicon')
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app, support_credentials=True)
 
-angry=0
-disgust=0
-fear=0
-happy=0
-sad=0
-surprise=0 
-neutral=0
+# Initialize global emotion counters
+emotion_counts = {
+    "angry": 0,
+    "disgust": 0,
+    "fear": 0,
+    "happy": 0,
+    "sad": 0,
+    "surprise": 0,
+    "neutral": 0
+}
 
-def extract_frames(video_name):	
-    # Read the video from specified path
+# Download necessary NLTK data
+nltk.download('vader_lexicon')
+
+# Create directory for storing frames
+def create_data_directory():
+    if not os.path.exists('data'):
+        os.makedirs('data')
+
+# Extract frames from the video
+def extract_frames(video_name):
     cam = cv2.VideoCapture(video_name)
-
-    try:
-        
-        # creating a folder named data
-        if not os.path.exists('data'):
-            os.makedirs('data')
-
-    # if not created then raise error
-    except OSError:
-        print ('Error: Creating directory of data')
-
-    # frame rate
+    create_data_directory()
     frame_rate = 2
-
-    # calculate interval between frames
     interval = int(cam.get(cv2.CAP_PROP_FPS) / frame_rate)
-    # frame
     currentframe = 0
 
-    while(True):
-        
-        # reading from frame
-        ret,frame = cam.read()
-
+    while True:
+        ret, frame = cam.read()
         if ret:
             if currentframe % interval == 0:
-                # if video is still left continue creating images
-                name = './data/frame' + str(int(currentframe/14)) + '.jpg'
-                print ('Creating...' + name)
-
-                # writing the extracted images
-                cv2.imwrite(name, frame)
-
-            # increasing counter so that it will
-            # show how many frames are created
+                frame_filename = f'./data/frame{int(currentframe/14)}.jpg'
+                print(f'Creating... {frame_filename}')
+                cv2.imwrite(frame_filename, frame)
             currentframe += 1
         else:
             break
 
-    # Release all space and windows once done
     cam.release()
     cv2.destroyAllWindows()
-    return int(currentframe/14 - 1)
+    return int(currentframe / 14 - 1)
 
-def detect_emotion(frame_path): #frame_path is a string of the path to the image
-    global angry, disgust, fear, happy, sad, surprise, neutral
-    # Input Image
+# Detect emotions from a given frame
+def detect_emotion(frame_path):
+    global emotion_counts
     try:
         input_image = cv2.imread(frame_path)
         emotion_detector = FER()
-        # Output image's information
-        angry = angry + emotion_detector.detect_emotions(input_image)[0]["emotions"]["angry"]
-        disgust = disgust + emotion_detector.detect_emotions(input_image)[0]["emotions"]["disgust"]
-        fear = fear + emotion_detector.detect_emotions(input_image)[0]["emotions"]["fear"]
-        happy = happy + emotion_detector.detect_emotions(input_image)[0]["emotions"]["happy"]
-        sad = sad + emotion_detector.detect_emotions(input_image)[0]["emotions"]["sad"]
-        surprise = surprise + emotion_detector.detect_emotions(input_image)[0]["emotions"]["surprise"]
-        neutral = neutral + emotion_detector.detect_emotions(input_image)[0]["emotions"]["neutral"]
-        print(emotion_detector.detect_emotions(input_image)[0]["emotions"])    
-    except:
-        print ('Error..Analysing next frame')
+        emotions = emotion_detector.detect_emotions(input_image)[0]["emotions"]
+        for emotion, score in emotions.items():
+            emotion_counts[emotion] += score
+        print(emotions)
+    except Exception as e:
+        print(f'Error analyzing frame: {e}')
 
 @app.route('/upload', methods=['POST'])
 def upload():
+    # Save uploaded video file
     video = request.files['file']
-    video.save(video.filename)  
+    video.save(video.filename)
     
     filename = video.filename
     vid = mp.VideoFileClip(filename)
     audio = vid.audio
-    audio_file_name_without_ext = filename.split('.mp4')[0]
-    audio_file_name = "{}.wav".format(audio_file_name_without_ext)
+    audio_file_name = f"{filename.split('.mp4')[0]}.wav"
     audio.write_audiofile(audio_file_name)
     print(audio_file_name)
-    
+
+    # Transcribe audio to text
     recognizer = sr.Recognizer()
     audioFile = sr.AudioFile(audio_file_name)
     with audioFile as source:
         data = recognizer.record(source)
-    text = recognizer.recognize_google(data, key=None)
+    text = recognizer.recognize_google(data)
     print(text)
     
-    # Sentiment analysis
+    # Analyze
+    # Analyze sentiment of the text
     from nltk.sentiment import SentimentIntensityAnalyzer
     analyzer = SentimentIntensityAnalyzer()
     sentiment_scores = analyzer.polarity_scores(text)
-    print("Sentiment score is : ")
-    print(sentiment_scores)
-    sentiment = ""
+    print("Sentiment score is:", sentiment_scores)
+    
+    sentiment = "Neutral"
     if sentiment_scores["compound"] >= 0.05:
         sentiment = "Positive"
     elif sentiment_scores["compound"] <= -0.05:
         sentiment = "Negative"
-    else:
-        sentiment = "Neutral"
-    print("Sentiment: ", sentiment)
+    print("Sentiment:", sentiment)
 
-    # Perform language detection and English fluency analysis
+    # Detect language and correct fluency if text is in English
     language = detect(text)
     if language == "en":
         blob = TextBlob(text)
         fluency = blob.correct().string
-        print("Fluency: ", fluency)
+        print("Fluency:", fluency)
     else:
         print("Language is not English.")
-    
+
+    # Extract frames from the video
     number_of_frames = extract_frames(filename)
 
-    video_data = []
+    # Detect emotions from each frame
     for i in range(number_of_frames):
-        frame_path = "./data/frame" + str(i) + ".jpg"
+        frame_path = f"./data/frame{i}.jpg"
         detect_emotion(frame_path)
 
+    # Aggregate emotion scores
+    emotions = [
+        emotion_counts["angry"], emotion_counts["disgust"], emotion_counts["fear"],
+        emotion_counts["happy"], emotion_counts["sad"], emotion_counts["surprise"],
+        emotion_counts["neutral"]
+    ]
+    emo_labels = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
+    max_emotion = emo_labels[emotions.index(max(emotions))]
+    print("Dominant Emotion:", max_emotion)
 
-    # Showing emotions 
-    print("Emotions print karo")
-    emotions = [angry, disgust, fear, happy, sad, surprise, neutral]
-    emo = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
-    max_emotion = emotions.index(max(emotions))
-    print(max_emotion)
-    
     # Define the emotion values for video and audio
     video_emotions = {
         'Angry': emotions[0],
@@ -197,16 +170,14 @@ def upload():
     # Calculate the weighted scores for video and audio
     video_score = sum(video_weights[emotion] * video_emotions[emotion] for emotion in video_emotions)
     audio_score = sum(audio_weights[emotion] * audio_emotions[emotion] for emotion in audio_emotions)
+    audio_score *= 60  # Adjust audio score scaling
 
     # Define the thresholds for each ranking category
     low_threshold = 70
     medium_threshold = 120
 
-    audio_score = audio_score * 60
-    
+    # Determine the recommended course based on the scores
     course = ""
-    
-    # Assign ranking categories based on the scores
     if video_score > audio_score:
         if video_score <= low_threshold:
             course = 'Communication in the 21st Century Workplace'
@@ -214,86 +185,80 @@ def upload():
             course = 'Communication Skills for University Success'
         else:
             course = 'Take Your English Communication Skills to the Next Level'
-    elif video_score < audio_score:
+    else:
         if audio_score <= low_threshold:
             course = 'Introduction to Communication Science'
         elif audio_score <= medium_threshold:
             course = 'Oral Communication for Engineering Leaders'
         else:
             course = 'Business Russian Communication. Part 3'
-    
-    final_data = { "audio" : sentiment_scores, "video" : emotions, "text" : text,"course":course}
-    
-    # # Process the video as needed
+
+    final_data = {
+        "audio": sentiment_scores,
+        "video": emotions,
+        "text": text,
+        "course": course
+    }
+
     return jsonify(final_data)
 
+# Stemming function
 def stem(text):
-    y=[]
-    
-    for i in text.split():
-        y.append(ps.stem(i))
-    
-    return " ".join(y)
+    ps = PorterStemmer()
+    return " ".join(ps.stem(word) for word in text.split())
 
-def recommend(new_df,similarity,course):
+# Course recommendation function
+def recommend(new_df, similarity, course):
     course_index = new_df[new_df['Course Name'] == course].index[0]
     distances = similarity[course_index]
-    course_list = sorted(list(enumerate(distances)),reverse=True, key=lambda x:x[1])[1:7]
+    course_list = sorted(list(enumerate(distances)), reverse=True, key=lambda x: x[1])[1:7]
     result_list = []
-    
+
     for i in course_list:
         course_name = new_df.iloc[i[0]]['Course Name']
         course_url = new_df.iloc[i[0]]['Course URL']
         course_desc = new_df.iloc[i[0]]['Course Description']
-        result_list.append({"name": course_name, "url": course_url,"description": course_desc})
-        
+        result_list.append({
+            "name": course_name,
+            "url": course_url,
+            "description": course_desc
+        })
+    
     return result_list
 
 @app.route('/', methods=['POST'])
 def result():
-    data = pd.read_csv("../Essetials/Coursera.csv")
+    data = pd.read_csv("../Essentials/Coursera.csv")
 
-    
-    data = data[['Course Name','Difficulty Level','Course Description','Skills','Course URL']]
-    
-    # Removing spaces between the words (Lambda funtions can be used as well)
-    data['Course Name'] = data['Course Name'].str.replace(' ',',')
-    data['Course Name'] = data['Course Name'].str.replace(',,',',')
-    data['Course Name'] = data['Course Name'].str.replace(':','')
-    data['Course Description'] = data['Course Description'].str.replace(' ',',')
-    data['Course Description'] = data['Course Description'].str.replace(',,',',')
-    data['Course Description'] = data['Course Description'].str.replace('_','')
-    data['Course Description'] = data['Course Description'].str.replace(':','')
-    data['Course Description'] = data['Course Description'].str.replace('(','')
-    data['Course Description'] = data['Course Description'].str.replace(')','')
+    data = data[['Course Name', 'Difficulty Level', 'Course Description', 'Skills', 'Course URL']]
 
-    #removing paranthesis from skills columns 
-    data['Skills'] = data['Skills'].str.replace('(','')
-    data['Skills'] = data['Skills'].str.replace(')','')
-    
+    # Clean and preprocess text data
+    for col in ['Course Name', 'Course Description']:
+        data[col] = data[col].str.replace(' ', ',').str.replace(',,', ',').str.replace(':', '').str.replace('_', '').str.replace('(', '').str.replace(')', '')
+
+    data['Skills'] = data['Skills'].str.replace('(', '').str.replace(')', '')
+
+    # Combine relevant columns into a single 'tags' column
     data['tags'] = data['Course Name'] + data['Difficulty Level'] + data['Course Description'] + data['Skills']
-    
-    data['tags'].iloc[1]
-    
-    new_df = data[['Course Name','tags','Course URL','Course Description']]
-    
-    new_df.loc[:, 'tags'] = data['tags'].str.replace(',', ' ')
-    new_df.loc[:, 'Course Name'] = data['Course Name'].str.replace(',', ' ')
-    
-    new_df.rename(columns={'Course Name': 'course_name'})
-    
-    new_df.loc[:, 'tags'] = new_df['tags'].apply(lambda x: x.lower()) #lower casing the tags column
-    
-    cv = CountVectorizer(max_features=5000,stop_words='english')
+    data['tags'] = data['tags'].str.replace(',', ' ').apply(lambda x: x.lower())
+
+    # Create a new dataframe with necessary columns
+    new_df = data[['Course Name', 'tags', 'Course URL', 'Course Description']]
+    new_df = new_df.rename(columns={'Course Name': 'course_name'})
+
+    # Apply stemming
+    new_df['tags'] = new_df['tags'].apply(stem)
+
+    # Vectorize tags and compute cosine similarity
+    cv = CountVectorizer(max_features=5000, stop_words='english')
     vectors = cv.fit_transform(new_df['tags']).toarray()
-    
-    new_df.loc[:, 'tags'] = new_df['tags'].apply(stem) #applying stemming on the tags column
     similarity = cosine_similarity(vectors)
-    result = recommend(new_df,similarity,request.json['course'])
-    
-    return jsonify({"recommand":result})
-        
-    
+
+    # Get course recommendation
+    course_name = request.json['course']
+    result = recommend(new_df, similarity, course_name)
+
+    return jsonify({"recommend": result})
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -87,7 +87,7 @@ function App() {
       </AnimatePresence>
 
       {/* <Footer key={"footer"} /> */}
-      <FooterNew />
+      {/* <FooterNew /> */}
     </div>
   );
 }
